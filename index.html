@@ -60,7 +60,7 @@
           background-color: rgb(80, 209, 238);
         }
       }
-      &.bot {
+      &.assistant {
         border-radius: 8px;
         align-self: flex-start;
         background-color: rgb(193, 233, 177);
@@ -104,31 +104,38 @@
         }
       }
     }
+
+    small {
+      font-size: 11px;
+      color: #212020;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 54px;
+      margin: auto;
+      max-width: 400px;
+      display: flex;
+      justify-content: center;
+    }
   </style>
 </head>
 <body>
 
   <main>
     <ul>
-      <li class="message bot">
+      <li class="message assistant">
         <span>GPT</span>
-        <p>Respuesta</p>
-      </li>
-      <li class="message user">
-        <span>Tu</span>
-        <p>Respuesta user</p>
-      </li>
-      <li class="message user">
-        <span>Tu</span>
-        <p>Respuesta user 2</p>
+        <p>¿Cómo puedo ayudarte hoy?</p>
       </li>
     </ul>
   </main>
 
   <form name="message">
     <input type="text" placeholder="Mensaje">
-    <button>enviar</button>
+    <button disabled>enviar</button>
   </form>
+
+  <small>&nbsp;</small>
 
   <template id="message-template">
     <li class="message">
@@ -138,11 +145,9 @@
   </template>
 
   <script type="module">
-    // import * as webllm from "@mlc-ai/web-llm"
-    // // Or only import what you need
-    // import { CreateMLCEngine } from "@mlc-ai/web-llm"
+    import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm"
 
-    
+    const SELECTED_MODEL = 'gemma-2b-it-q4f32_1-MLC'
 
     const $ = el => document.querySelector(el)
     const $form = $('form')
@@ -151,27 +156,51 @@
     const $messages = $('ul')
     const $container = $('main')
     const $button = $('button')
+    const $small = $('small')
+    let messages = []
+
+    // Cargamos el modelo
+    const engine = await CreateMLCEngine(
+      SELECTED_MODEL,
+      {
+        initProgressCallback: (info) => {
+          $small.textContent = info.text
+          if (info.progress === 1) {
+            $button.removeAttribute('disabled')
+          }
+        }
+      }
+    )
 
 
-
-
-    $form.addEventListener('submit', (e) => {
+    $form.addEventListener('submit', async (e) => {
       e.preventDefault()
 
       const messageText = $input.value.trim()
 
       if (messageText !== '') {
-        // Agregar mensaje al dom
         $input.value = ''
       }
 
       addMessage(messageText, 'user')
       $button.setAttribute('disabled', true)
 
-      setTimeout(() => {
-        addMessage('Hola hermoso, como vas?', 'bot')
-        $button.removeAttribute('disabled')
-      }, 1000);
+      const reply = await engine.chat.completions.create({
+        messages: [
+          ...messages,
+          {
+            role: 'user',
+            content: messageText
+          }
+        ]
+      })
+
+      console.log('reply', reply.choices[0].message.content)
+
+      const botMessage = reply.choices[0].message
+
+      addMessage(botMessage.content, 'assistant')
+      $button.removeAttribute('disabled')
     })
 
     function addMessage(text, sender) {
@@ -183,7 +212,12 @@
       const $text = $newMessage.querySelector('p')
 
       $text.textContent = text
-      $who.textContent = sender === 'bot' ? 'GPT' : 'Tu'
+      $who.textContent = sender === 'assistant' ? 'GPT' : 'Tu'
+
+      messages.push({
+        role: sender,
+        content: text
+      })
 
       $newMessage.classList.add(sender)
 
